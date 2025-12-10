@@ -1,0 +1,218 @@
+\chapter{Methodology}
+
+\section{Architectural Design Overview}
+
+Red Sentinel is implemented using a microservice architecture. In this design, each major functional component of the system runs as an independent service. These services communicate via well-defined APIs and are coordinated by a central orchestration core—the "Core Module." This microservice approach ensures that each module is isolated, independently deployable, testable, and can be scaled or replaced without impacting the rest of the system—addressing concerns of maintainability, modularity, and system complexity typical in security tools.
+
+To connect the ML-based payload generator with the rest of the system and other modules, a data pipeline architecture is used. As described in the literature on integrating ML pipelines with microservices, this setup supports data ingestion, preprocessing, model serving, asynchronous communication, and modular isolation of ML components from other services.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/arch.png}
+    \caption{System Architecture Diagram}
+    \label{fig:system_architecture}
+\end{figure}
+
+\subsection{Core Module}
+
+The Core Module serves as the orchestration layer for Red Sentinel. It coordinates communication between different microservices, manages workflow execution, and maintains system state. Key responsibilities include:
+
+\begin{itemize}
+    \item \textbf{Workflow Orchestration:} Manages the end-to-end vulnerability testing workflow, from target URL submission to final report generation.
+    
+    \item \textbf{API Gateway:} Provides a unified RESTful API interface for external clients and internal service communication.
+    
+    \item \textbf{State Management:} Tracks scanning sessions, maintains payload generation history, and stores vulnerability findings.
+    
+    \item \textbf{Service Discovery:} Facilitates dynamic discovery and registration of microservices for scalable deployment.
+    
+    \item \textbf{Error Handling and Recovery:} Implements retry mechanisms and fallback strategies for failed operations.
+\end{itemize}
+
+The Core Module is implemented using NestJS, a progressive Node.js framework that provides built-in support for microservices, dependency injection, and modular architecture patterns.
+
+\subsection{Context Module}
+
+The Context Module is responsible for analyzing target web applications to identify injection points and extract contextual information necessary for generating appropriate payloads. This module performs:
+
+\begin{itemize}
+    \item \textbf{HTML Parsing:} Analyzes the Document Object Model (DOM) structure to identify form inputs, URL parameters, and dynamic content areas.
+    
+    \item \textbf{JavaScript Analysis:} Examines inline scripts and external JavaScript files to detect potential injection contexts within script blocks.
+    
+    \item \textbf{Context Classification:} Categorizes each identified injection point according to its syntactic context (HTML attribute, JavaScript string, event handler, URL parameter, etc.).
+    
+    \item \textbf{Sanitization Detection:} Attempts to identify client-side and server-side filtering mechanisms by testing basic payloads and analyzing responses.
+    
+    \item \textbf{Context Metadata Generation:} Produces structured metadata including context type, surrounding code, expected encoding, and sanitization indicators.
+\end{itemize}
+
+This metadata is formatted and passed to the Payload Handler to guide context-aware payload generation.
+
+\subsection{Payload Handler}
+
+The Payload Handler consists of two primary models working in tandem: the Payload Generator and the Obfuscation Model.
+
+\subsubsection{Payload Generator}
+
+The Payload Generator is responsible for producing syntactically valid, context-adapted, and execution-ready XSS attack strings. Red Sentinel employs a transformer-based encoder-decoder architecture trained specifically for cross-site scripting contexts and adversarial behavior.
+
+The transformer model is trained on a dataset formed by pairs of sanitized script structures provided by the Core Module and the corresponding XSS payloads. The generator is built on an encoder-decoder transformer network, chosen because of its exceptional ability to model long-range dependencies and handle complex code sequences. The model comprises:
+
+\begin{itemize}
+    \item \textbf{Byte-Level Tokenizer}
+    
+    Instead of word- or character-level tokenization, Red Sentinel uses a byte-level tokenizer (similar to Byte-Pair Encoding) to ensure that all characters—including \texttt{<}, \texttt{>}, \texttt{'}, \texttt{"}, \texttt{(}, \texttt{)}, \texttt{\textbackslash}, and Unicode variants—are preserved without normalization. This is crucial because minor character transformations can change the exploitability of an XSS payload.
+    
+    \item \textbf{Encoder}
+    
+    The encoder receives the attack type, payload type, and contextual information extracted by the Context Module. The encoder produces a contextual embedding that expresses the syntactic and semantic constraints of the injection point.
+    
+    \item \textbf{Decoder}
+    
+    The decoder autoregressively generates an attack string conditioned on the encoder output. It learns patterns for escaping contexts, invoking JavaScript execution, nesting HTML/JS structures, and exploiting browser quirks. It is designed to avoid generating malformed payloads by learning valid grammar structures from curated training data.
+    
+    \item \textbf{Attention Mechanisms}
+    
+    Attention heads enable the model to correlate specific positions in the context (e.g., inside quotes, inside script tags) with correct exploit strategies. This facilitates generation of highly specific payloads such as:
+    
+    \begin{itemize}
+        \item Attribute breakouts: \texttt{"><svg/onload=alert(1)>}
+        \item Script-block injections: \texttt{';alert(1);//}
+        \item URL-based injections: \texttt{javascript:alert(1)}
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/transformer.png}
+    \caption{Transformer Model Structure}
+    \label{fig:transformer_model}
+\end{figure}
+
+\subsubsection{Obfuscation Model}
+
+Modern defensive systems often rely on pattern matching or signature detection, which is particularly vulnerable to obfuscation. Therefore, incorporating systematic obfuscation increases the likelihood of discovering hidden vulnerabilities and evaluating the true resilience of a target.
+
+\paragraph{Encoding-Based Obfuscation}
+
+This class manipulates the representation of characters while preserving their semantics at runtime:
+
+\begin{itemize}
+    \item URL encoding (percent-encoding): \texttt{\%3Cscript\%3E}
+    \item HTML entity encoding: \texttt{\&\#x3C;script\&\#x3E;}
+    \item Unicode homoglyphs: Alternative representations of common symbols
+    \item Base64 wrapper techniques: e.g., \texttt{eval(atob("YWxlcnQoMSk="))}
+\end{itemize}
+
+These methods exploit weaknesses in sanitization routines that decode values inconsistently.
+
+\paragraph{Structural Obfuscation}
+
+Structural modification alters the payload's syntax without changing its effect:
+
+\begin{itemize}
+    \item String splitting: \texttt{a = "al" + "ert"; window[a](1)}
+    \item Wrapped event handlers: \texttt{<img src=x onerror=\%61\%6c\%65\%72\%74(1)>}
+    \item Nonstandard tag nesting
+    \item Junk insertion (harmless characters or comments)
+\end{itemize}
+
+This category is particularly effective against filter engines that scan for simple signatures (e.g., \texttt{alert}).
+
+\paragraph{JavaScript-Based Dynamic Obfuscation}
+
+A more advanced transformation relies on runtime reconstruction:
+
+\begin{itemize}
+    \item Using constructor functions: \texttt{Function("al"+"ert(1)")()}
+    \item Indirect invocation using event stacks
+    \item Using proxies or dynamically generated DOM nodes to execute embedded code
+\end{itemize}
+
+These methods exploit JavaScript's dynamic nature to evade static analysis.
+
+\paragraph{Obfuscation Module Overview}
+
+The Obfuscation Module integrates into the system workflow as follows:
+
+\begin{enumerate}
+    \item The Payload Generator produces a set of base payloads
+    \item Payloads are sent to the Obfuscation Service when enabled
+    \item The transformed payloads are injected into the target applications
+    \item All variants and their execution results are logged
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/flow.png}
+    \caption{Payload Handler Flow Structure}
+    \label{fig:payload_flow}
+\end{figure}
+
+Together, the Payload Generator and Obfuscation Module form the intelligent core of Red Sentinel. The generator creates contextually accurate, execution-ready XSS payloads, while the obfuscation system transforms them to evade filters and explore deeper vulnerabilities. Their microservice design ensures modularity, scalability, and extensibility, supporting Red Sentinel's mission of providing advanced, ML-driven offensive security capabilities.
+
+\section{Dataset Preparation and Preprocessing}
+
+A high-quality dataset is essential for training the transformer-based payload generator. The dataset construction process involved several stages:
+
+\subsection{Data Collection}
+
+Payload data was collected from multiple sources:
+
+\begin{enumerate}
+    \item \textbf{Open-Source Repositories:} XSS payload collections from GitHub repositories such as PayloadsAllTheThings, XSS Hunter, and OWASP's XSS Filter Evasion Cheat Sheet
+    
+    \item \textbf{Academic Publications:} Payloads extracted from research papers on XSS vulnerability detection
+    
+    \item \textbf{Vulnerability Databases:} Real-world exploit examples from CVE databases and security advisories
+    
+    \item \textbf{Synthetic Generation:} Rule-based generation of context-specific payloads for underrepresented categories
+\end{enumerate}
+
+\subsection{Context Labeling}
+
+Each payload was manually or semi-automatically labeled with:
+
+\begin{itemize}
+    \item \textbf{Attack Class:} Reflected, Stored, DOM-based
+    \item \textbf{Payload Type:} Event handler, script injection, attribute breakout, etc.
+    \item \textbf{Context Type:} HTML attribute, JavaScript string, URL parameter, etc.
+    \item \textbf{Risk Score:} Estimated severity and exploitability (0.0 to 1.0)
+\end{itemize}
+
+\subsection{Preprocessing Pipeline}
+
+The preprocessing pipeline included:
+
+\begin{enumerate}
+    \item \textbf{Deduplication:} Removal of exact and near-duplicate payloads using hash-based and fuzzy matching
+    
+    \item \textbf{Normalization:} Standardization of whitespace, encoding formats, and character representations
+    
+    \item \textbf{Validation:} Syntactic validation to ensure payloads are well-formed
+    
+    \item \textbf{Tokenization:} Application of byte-level SentencePiece tokenization with byte fallback
+    
+    \item \textbf{Sequence Formatting:} Construction of input-output pairs with special tokens for context metadata
+\end{enumerate}
+
+Example formatted training instance:
+
+\begin{verbatim}
+Input: <ATTACK_CLASS>event-handler</ATTACK_CLASS>
+       <PAYLOAD_TYPE>event-mouse</PAYLOAD_TYPE>
+       <RISK>0.97</RISK>
+
+Output: "><img src=1 onerror=prompt(document.domain)>
+\end{verbatim}
+
+\section{Activity Diagram}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/active.png}
+    \caption{System Activity Diagram}
+    \label{fig:activity_diagram}
+\end{figure}
+

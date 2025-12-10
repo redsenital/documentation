@@ -1,0 +1,165 @@
+\chapter{Work Completed and Progress Report}
+
+\section{Work Completed}
+
+\subsection{Research}
+
+Extensive research was conducted on cross-site scripting vulnerabilities, attack vectors, and modern web security challenges. This included studying the OWASP Top Ten, existing XSS scanners such as XSStrike and DalFox, and academic literature on ML-based exploit generation. Transformer architectures, byte-level tokenization methods, and adversarial obfuscation techniques were analyzed to determine their suitability for generating context-aware payloads. A detailed survey of microservice architectures and ML-serving pipelines was also completed to guide the system's design.
+
+\subsection{Familiarization with Tools and Frameworks}
+
+The team became proficient with relevant frameworks including TensorFlow for model development, FastAPI for microservice integration, Docker for containerization, and GitHub for version control and CI/CD workflows. Tools commonly used in penetration testing—such as Burp Suite, OWASP ZAP, and browser-based developer consoles—were familiarized to support payload testing and context extraction. Additional effort was dedicated to understanding deployment tools required for scalable ML microservices.
+
+\subsection{Dataset Preparation and Preprocessing}
+
+A dataset of XSS payloads was collected and curated from open-source repositories, academic publications, and synthetic generation procedures. Payloads were categorized by injection context (HTML attributes, script blocks, URL parameters, etc.) and normalized into a format compatible with byte-level tokenization. Preprocessing steps included context-labeling, deduplication, noise removal, encoding normalization, and construction of input-output pairs for supervised transformer training.
+
+\subsection{Model Development and Analysis}
+
+Initially multiple models were developed to analyze the efficacy of different architectures for XSS payload generation.
+
+\subsubsection{3-Layer GRU Decoder Model \& 3-Layer LSTM Decoder Model}
+
+In addition to the transformer-based architecture, a recurrent neural network variant was developed to evaluate lightweight sequence-generation approaches for XSS payload synthesis. The implemented model is a three-layer unidirectional GRU decoder, designed to process byte-tokenized input sequences of fixed length (150 tokens). 
+
+The architecture begins with an embedding layer that maps discrete byte indices into a 256-dimensional continuous vector space, enabling the model to capture syntactic and semantic relationships between characters commonly used in XSS payloads. Each GRU block contains 256 hidden units and is followed by layer normalization to stabilize training and mitigate exploding gradients. Skip-connections and logical operations are incorporated between recurrent layers to enhance information flow and to allow the model to combine contextual signals derived from both the embedding space and the hidden states. 
+
+A final TimeDistributed dense layer projects each timestep output into the vocabulary space, enabling autoregressive token prediction for payload generation. Despite its relatively small size (1.34 million parameters), this model is capable of learning structural patterns such as attribute breakouts, event-handler injections, and common JavaScript invocation sequences. Its efficiency and reduced computational footprint make it suitable for rapid experimentation, ablation studies, and low-latency microservice deployment where a full transformer model may be unnecessary or too resource-intensive.
+
+The same architecture was implemented using LSTM layers for comparison.
+
+\paragraph{Example Results}
+
+This model was capable of generating working XSS payloads from a starting payload seed:
+
+\begin{verbatim}
+Seed:   "<script"
+Payload: "<script>alert(1)</script>"
+\end{verbatim}
+
+\subsubsection{Byte-Level Transformer Payload Generator}
+
+Following the initial RNN experiments, a more advanced transformer-based sequence-to-sequence model was developed to improve generative fidelity and contextual awareness. This model used a byte-level SentencePiece tokenizer with byte fallback enabled, ensuring full coverage of printable and non-printable characters—a critical requirement for XSS payloads, which often include symbols outside typical word/token vocabularies.
+
+The preprocessing pipeline encoded both structured metadata (attack class, payload type, risk score) and target payloads into padded integer sequences. Custom encoder-decoder padding masks, autoregressive self-attention masks, and explicit positional encodings were implemented to maintain compatibility with TensorFlow's serialization system.
+
+The transformer architecture consisted of:
+
+\begin{itemize}
+    \item 4-layer encoder with multi-head attention (8 heads)
+    \item 4-layer decoder with masked multi-head autoregressive attention
+    \item $d_{model}$ = 256, $d_{ff}$ = 1024
+    \item Final dense projection over the full byte vocabulary
+\end{itemize}
+
+The model was trained using a masked cross-entropy loss function that ignored padding tokens and optimized with the Adam optimizer. Training was stabilized with learning-rate scheduling, ReduceLROnPlateau, and early stopping. A custom inference engine was built, including a specialized decoder-step model for stepwise token generation, enabling greedy, sampling-based, and beam-search decoding strategies.
+
+\paragraph{Example Results}
+
+In practice, the byte-level transformer significantly outperformed the GRU model. It was able to generate longer, structurally complex payloads with embedded JavaScript calls, event handlers, HTML attribute breakouts, and encoded characters. The model could take structured context such as:
+
+\begin{verbatim}
+Input:
+<ATTACK_CLASS>event-handler</ATTACK_CLASS>
+<PAYLOAD_TYPE>event-mouse</PAYLOAD_TYPE>
+<RISK>0.97</RISK>
+
+Output:
+"><img src=1 onerror=prompt(document.domain)>
+\end{verbatim}
+
+\subsubsection{T5-Based Large Language Model Fine-Tuning}
+
+To benchmark the transformer against a pre-trained language model, a third model was developed by fine-tuning the T5-base architecture using the same structured dataset. HuggingFace's \texttt{AutoModelForSeq2SeqLM}, \texttt{DataCollatorForSeq2Seq}, and Adafactor optimizer were used to perform supervised fine-tuning across five epochs with gradient accumulation.
+
+T5's pre-training on large-scale text corpora provided strong generative priors, and early experimentation revealed significantly faster convergence compared to the GRU and custom transformer models. T5 was capable of producing syntactically rich payloads and often generated multi-stage injection sequences (e.g., event-triggered JavaScript execution combined with HTML entity encoding) without explicitly being instructed to do so.
+
+This model served two purposes:
+
+\begin{enumerate}
+    \item As a baseline metric to evaluate the performance of the custom byte-level transformer
+    \item As an alternative model candidate for potential integration into Red Sentinel's payload-generation engine
+\end{enumerate}
+
+While T5 exhibited high generative quality, it lacked fine-grained control over byte-level precision, which is essential for payloads requiring arbitrarily encoded characters. Therefore, T5's role remains supplementary, while the byte-level transformer continues as the main candidate for integration.
+
+\section{Challenges Encountered}
+
+\begin{enumerate}
+    \item \textbf{Dataset Quality and Context Ambiguity}
+    
+    Obtaining high-quality, context-labeled XSS payload datasets was difficult. Many publicly available samples lacked structured metadata, requiring extensive manual curation and synthetic augmentation.
+    
+    \item \textbf{Byte-Level Tokenization Complexity}
+    
+    Designing a tokenizer capable of faithfully representing special characters, escape sequences, and Unicode variants introduced challenges in maintaining consistency between training and inference.
+    
+    \item \textbf{Model Stability During Training}
+    
+    Early versions of the transformer exhibited unstable loss curves due to highly variable sequence lengths and the presence of rare byte patterns. This required specialized padding masks, learning-rate scheduling, and careful regularization.
+    
+    \item \textbf{Context-to-Payload Alignment}
+    
+    Ensuring the model correctly interpreted structured metadata (such as \texttt{<ATTACK\_CLASS>} labels) required additional preprocessing logic and multiple ablation studies to verify attention alignment.
+    
+    \item \textbf{Microservice Integration Overhead}
+    
+    Integrating the model into a containerized microservice pipeline introduced latency, serialization constraints, and cross-module communication issues, particularly during high-volume inference.
+    
+    \item \textbf{Sandboxed Evaluation Environment}
+    
+    Building a controlled, safe execution environment for evaluating generated payloads was non-trivial, as it required strict isolation to prevent unintended script execution or security risks.
+    
+    \item \textbf{Obfuscation Module Early-Stage Limitations}
+    
+    Although the initial obfuscation module worked for basic encoding transformations, more advanced dynamic or multi-stage obfuscation strategies remain challenging and require further model guidance.
+\end{enumerate}
+
+\section{Work in Progress}
+
+The project is ongoing with several components under active development. The transformer payload generator has reached a functional stage, but optimization, integration, and extended evaluation remain areas of focus. Improvements to the context extraction module, obfuscation mechanisms, and data pipeline orchestration are currently underway. Additional evaluation experiments and adversarial robustness testing are also planned to ensure practical usability.
+
+\subsection{Remaining Tasks}
+
+\begin{enumerate}
+    \item \textbf{Advanced Obfuscation Integration}
+    
+    Implement dynamic JavaScript-based obfuscation techniques, multi-stage encoding, and adversarial transformations.
+    
+    \item \textbf{Context Module Enhancement}
+    
+    Expand context parsing to handle nested HTML structures, script-block boundaries, and complex dynamic DOM interactions.
+    
+    \item \textbf{Model Retraining and Hyperparameter Tuning}
+    
+    Perform extended training with a refined dataset, larger batch sizes, learning-rate sweeps, and model-depth experiments.
+    
+    \item \textbf{Benchmarking Against Existing Tools}
+    
+    Compare the system's performance with industry tools such as XSStrike, DalFox, and commercial scanners.
+    
+    \item \textbf{Dashboard and Reporting System}
+    
+    Develop a web-based dashboard for visualizing discovered vulnerabilities, payload effectiveness, and overall scan metrics.
+    
+    \item \textbf{Security Hardening of Microservices}
+    
+    Implement API gateway protections, rate limiting, mTLS communication, and container-level isolation.
+    
+    \item \textbf{WAF Adversarial Testing Loop}
+    
+    Integrate ML-based XSS detectors to create a defensive-offensive feedback loop for adversarial training.
+    
+    \item \textbf{Full End-to-End Pipeline Optimization}
+    
+    Improve orchestration, reduce inference latency, and ensure stable high-throughput performance across modules.
+\end{enumerate}
+
+\section{Project Scheduling}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/gantt.png}
+    \caption{Gantt Chart Showing Work Schedule}
+    \label{fig:gantt_chart}
+\end{figure}
