@@ -1,0 +1,25 @@
+\section{Context Extraction and Analysis}
+
+Context extraction is fundamental to generating effective, context-aware XSS payloads. This section reviews research on identifying injection points, classifying contexts, and extracting metadata necessary for intelligent payload generation.
+
+\subsection{Context-Aware Fuzzing}
+
+Pala et al. (2023) examined contemporary XSS scanners and highlighted XSStrike as a tool that combines intelligent fuzzing with basic machine-learning techniques \cite{pala2023xssassessment}. XSStrike analyzes the structure of a web page to detect injection points and then mutates payloads based on contextual feedback. Their evaluation showed that this approach improves detection and execution of XSS payloads across different contexts, illustrating the value of context-aware fuzzing.
+
+Fink (2018) introduced FOXSS, a scanner that integrates static data-flow analysis with targeted, context-sensitive fuzzing \cite{fink2018foxss}. The tool identifies potential input flows and generates tailored payloads for each sink, verifying results in a real browser. FOXSS demonstrated very high detection accuracy, outperforming conventional scanners and significantly reducing false positives, indicating that program analysis combined with adaptive fuzzing can greatly enhance XSS detection.
+
+\subsection{DOM and JavaScript Analysis}
+
+Modern web applications heavily rely on client-side JavaScript and dynamic DOM manipulation, creating complex attack surfaces that traditional static analysis tools struggle to identify. Research in this area focuses on dynamic analysis techniques, JavaScript instrumentation, and runtime monitoring to detect injection points within script contexts.
+
+Advanced context extraction systems employ Abstract Syntax Tree (AST) analysis to understand code structure, identify variable assignments, and track data flow through JavaScript execution. This enables precise identification of contexts where user input is processed, allowing for more targeted payload generation.
+
+\subsection{Sanitization and Filter Detection}
+
+Understanding the sanitization mechanisms employed by target applications is crucial for generating payloads that can evade filters. Research demonstrates that probing techniques, differential testing, and machine learning can effectively fingerprint sanitization libraries and identify bypass opportunities.
+
+Context extraction modules must not only identify where user input appears in the output but also understand what transformations are applied to that input. This metadata enables payload generators to craft inputs that survive sanitization while maintaining their malicious intent.
+
+\subsection{Multi-Context Classification}
+
+Web applications often reflect user input in multiple contexts simultaneously (e.g., both HTML attribute and JavaScript string). Effective context extraction requires classifying all contexts where input appears and understanding their interaction. Research shows that multi-label classification approaches combined with syntax-aware parsing significantly improve context identification accuracy.

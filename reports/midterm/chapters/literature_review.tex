@@ -2,37 +2,9 @@
 
 The following review examines significant advancements in automated web security testing, with a particular focus on XSS payload generation and adversarial input synthesis. Existing research covers a wide spectrum of techniques, including reinforcement learning, neural machine translation, generative adversarial models, and transformer-based language approaches. By analyzing these contributions, this review highlights the methodological trends, strengths, and limitations that shape the design and development of the Red Sentinel system.
 
-\section{Reinforcement Learning Approaches}
-
-Foley and Maffeis (2022) propose HAXSS, a hierarchical reinforcement-learning framework to automatically generate XSS attack payloads \cite{foley2022haxss}. Their approach frames the payload creation as two nested RL "games." The first agent learns to escape the immediate HTML context of user output (escaping tags or attributes), while the second agent intervenes whenever the application attempts sanitization—it learns to obfuscate the payload to bypass filters. Successful obfuscations are fed back into the first agent for further refinement. 
-
-Implemented as an end-to-end black-box fuzzer, HAXSS was evaluated on both synthetic benchmarks and real web applications. It identified 131 XSS vulnerabilities (20\% more than state-of-the-art scanners) with zero false positives, including rediscovering known CVEs and uncovering 5 novel CVEs in production-grade sites. Thus, HAXSS demonstrates that hierarchical RL can produce diverse, context- and filter-aware payloads that significantly improve XSS discovery over traditional scanners.
-
-Song et al. (2023) presented a grey-box fuzzing system that uses reinforcement learning to create and refine XSS payloads \cite{song2023greybox}. After mapping all input points through static analysis, the authors trained RL agents (DQN, DDQN, and Policy Gradient) to adjust payloads based on execution feedback. The RL-based fuzzer identified all known XSS vulnerabilities in benchmark applications with no false positives, demonstrating that RL can effectively adapt payloads to complex contexts.
-
-\section{Deep Generative Models}
-
-Khan (2024) presents LL-XSS, an end-to-end deep generative model for crafting XSS payloads \cite{khan2024llxss}. Unlike hand-crafted or brute-fuzzed payloads, LL-XSS leverages a combination of auto-regressive neural networks and transformer architectures to analyze both frontend and backend web code and produce candidate attack scripts. The model is trained on example web application code to learn common injection patterns, then generates new malicious scripts aimed at identified vulnerabilities. 
-
-In evaluation on the OWASP Juice Shop, the author reports that LL-XSS can automatically generate syntactically valid and exploitable XSS payloads by understanding the target's code context. This approach effectively automates the penetration-testing process: LL-XSS bypasses known filters and exposes vulnerabilities with minimal human guidance, demonstrating the promise of AI-driven payload creation for web security.
-
-\section{Neural Machine Translation}
-
-Frempong et al. (2021) developed HIJaX, a neural machine translation model that converts natural-language attack descriptions into working XSS payloads \cite{frempong2021hijax}. The system was trained on paired examples of intent phrases and JavaScript exploits. Their experiments showed that the model could reliably generate valid payloads that triggered real XSS vulnerabilities, demonstrating that neural translation methods can automate exploit creation even for users with limited technical expertise.
-
-This work is particularly significant because it bridges the gap between high-level security objectives and low-level technical implementation, making offensive security testing more accessible to non-experts while maintaining technical rigor.
-
-\section{Context-Aware Fuzzing}
-
-Pala et al. (2023) examined contemporary XSS scanners and highlighted XSStrike as a tool that combines intelligent fuzzing with basic machine-learning techniques \cite{pala2023xssassessment}. XSStrike analyzes the structure of a web page to detect injection points and then mutates payloads based on contextual feedback. Their evaluation showed that this approach improves detection and execution of XSS payloads across different contexts, illustrating the value of context-aware fuzzing.
-
-Fink (2018) introduced FOXSS, a scanner that integrates static data-flow analysis with targeted, context-sensitive fuzzing \cite{fink2018foxss}. The tool identifies potential input flows and generates tailored payloads for each sink, verifying results in a real browser. FOXSS demonstrated very high detection accuracy, outperforming conventional scanners and significantly reducing false positives, indicating that program analysis combined with adaptive fuzzing can greatly enhance XSS detection.
-
-\section{Large Language Models and Obfuscation}
-
-Miczek et al. (2025) explored the use of large language models to generate obfuscated XSS attacks capable of evading machine-learning detectors \cite{miczek2025llml_xss}. Their study showed that classifiers trained on standard payloads performed poorly when encountering obfuscated variants. By fine-tuning a transformer to generate diverse obfuscations, the authors significantly improved detector robustness after retraining. This work highlights the usefulness of LLM-generated adversarial examples for strengthening defensive models.
-
-The dual nature of this research—both offensive (generating evasive payloads) and defensive (improving detection)—demonstrates the critical role of adversarial machine learning in advancing web security.
+\input{chapters/literature_review/core_gateway}
+\input{chapters/literature_review/context_extraction}
+\input{chapters/literature_review/payload_generation}
 
 \section{Research Gaps and Opportunities}
 
