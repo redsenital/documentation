@@ -153,23 +153,91 @@ The Core Module leverages modern TypeScript-based technologies for reliability a
 
 The modular architecture enables independent testing, deployment, and scaling of the Core Module, supporting Red Sentinel's microservice design philosophy.
 
-\subsection{Context Module}
+\subsection{Context-Aware Analysis Module}
 
-The Context Module is responsible for analyzing target web applications to identify injection points and extract contextual information necessary for generating appropriate payloads. This module performs:
+The Context-Aware Module is responsible for examining how user-controlled input appears inside a webpage and determining whether that location is exploitable. Red Sentinel performs this using a hybrid approach that combines static HTML parsing, dynamic browser execution tracing, rule-based reasoning, and machine learning models. The output of this module is a normalized and labeled structure, known as a C-Script, which the payload generator later uses to craft attack strings.
+
+\subsubsection{Static Context Extraction}
+
+This stage performs offline HTML parsing using \textbf{BeautifulSoup4 (BS4)} and custom parsers. The system inspects the DOM to identify injection surfaces such as attributes, text nodes, script bodies, URL parameters, and form fields.
 
 \begin{itemize}
-    \item \textbf{HTML Parsing:} Analyzes the Document Object Model (DOM) structure to identify form inputs, URL parameters, and dynamic content areas.
-    
-    \item \textbf{JavaScript Analysis:} Examines inline scripts and external JavaScript files to detect potential injection contexts within script blocks.
-    
-    \item \textbf{Context Classification:} Categorizes each identified injection point according to its syntactic context (HTML attribute, JavaScript string, event handler, URL parameter, etc.).
-    
-    \item \textbf{Sanitization Detection:} Attempts to identify client-side and server-side filtering mechanisms by testing basic payloads and analyzing responses.
-    
-    \item \textbf{Context Metadata Generation:} Produces structured metadata including context type, surrounding code, expected encoding, and sanitization indicators.
+    \item Extracts tag names, attributes, raw values, depth, parent, and sibling structure.
+    \item Detects static flags (HTML-entity usage, URL encoding, JavaScript escaping).
+    \item Produces a structured static context object for every potential injection point.
 \end{itemize}
 
-This metadata is formatted and passed to the Payload Handler to guide context-aware payload generation.
+\subsubsection{Dynamic Context Extraction}
+
+Static content alone fails to capture runtime behavior. Red Sentinel launches a headless browser using \textbf{Playwright} and records dynamic modifications triggered by JavaScript execution.
+
+\begin{itemize}
+    \item Detects \texttt{innerHTML} / \texttt{outerHTML} sinks.
+    \item Logs event listeners (\texttt{onclick}, \texttt{onload}, custom JS handlers).
+    \item Captures nodes created or modified at runtime.
+    \item Records whether the context becomes dynamic and vulnerable after execution.
+\end{itemize}
+
+The static and dynamic information is then merged into a unified structure.
+
+\subsubsection{Rule-Based Classification}
+
+A custom rule engine evaluates structural and behavioral patterns to infer an initial attack class.
+
+\begin{itemize}
+    \item Attributes starting with \texttt{on*} are labeled as event-handler contexts.
+    \item Any element inserted through \texttt{innerHTML} is marked as DOM-XSS.
+    \item URL-based attributes may produce JavaScript protocol execution.
+\end{itemize}
+
+These deterministic rules form the foundation for supervised ML labels and validation.
+
+\subsubsection{ML-Based Attack and Payload Classification}
+
+To enhance generalization, Red Sentinel trains two \textbf{Random Forest} classifiers using the unified context features:
+
+\begin{enumerate}
+    \item Attack Class Model (e.g., event-handler, DOM-based, attribute-breakout)
+    \item Payload Type Model (e.g., js-exec, event-transition, html-breakout)
+\end{enumerate}
+
+Contexts are encoded using one-hot vectors for tags and attributes, together with dynamic boolean features.  
+The ML output refines the rule-based inference and improves robustness across diverse HTML structures.
+
+\subsubsection{C-Script Construction}
+
+The final stage produces a C-Script, a compact representation that describes the vulnerability surface.
+
+\begin{verbatim}
+{
+  "attackClass": "dynamic-event",
+  "payloadType": "js-exec",
+  "riskScore": 0.92,
+  "sink": "innerHTML",
+  "allowedChars": "<>'\"/`",
+  "isDynamic": true
+}
+\end{verbatim}
+
+This unified structure guides the Payload Generator by specifying contextual restrictions, browser behavior, and exploitability.
+
+\subsubsection{Context Dataset Construction}
+
+The module automatically generates training data by storing each context and its inferred labels in \textbf{JSONL} format.  
+This dataset combines:
+
+\begin{itemize}
+    \item BS4 static extraction output
+    \item Playwright dynamic logs
+    \item Rule-engine classifications
+    \item Cleaned ML-ready feature vectors
+\end{itemize}
+
+The result is a scalable dataset used to train and evaluate the Random Forest classifiers.
+
+\paragraph{Summary}
+
+The Context-Aware Module forms the analytical backbone of Red Sentinel. By combining static DOM parsing, dynamic browser execution tracing, rule-based inference, and Random Forest classification, it produces a precise understanding of every injection point. This information is distilled into the C-Script structure, enabling the payload generator to craft highly accurate, context-specific XSS payloads. The module's hybrid design ensures reliability, extensibility, and compatibility with ML-driven offensive security workflows.
 
 \subsection{Payload Handler}
 
