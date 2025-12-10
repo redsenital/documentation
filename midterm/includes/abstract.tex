@@ -1,0 +1,9 @@
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+Cross-Site Scripting (XSS) remains a persistent web vulnerability, and traditional scanners, dependent on signatures and manually crafted payloads, struggle with modern filtering mechanisms and diverse injection contexts. This project introduces Red Sentinel, a transformer-based, machine learning–driven system that automatically generates context-aware XSS payloads. Built on a microservice architecture, it includes modules for extracting injection contexts, generating and obfuscating payloads, and orchestrating end-to-end testing workflows. By using byte-level tokenization and an encoder–decoder transformer, the system captures syntactic and semantic nuances across HTML, JavaScript, event handlers, and URL parameters.
+
+Red Sentinel’s generator produces syntactically valid, execution-ready payloads tailored to specific contexts, while an obfuscation layer applies encoding and structural mutations to evade modern WAFs. Early experiments show the model generates more diverse and effective payloads than manually created ones, with evaluation mechanisms that measure both success rates and filter evasion. This report summarizes the system architecture, dataset preparation, and results from GRU, LSTM, and transformer baselines, and concludes with challenges, progress to date, and future work including enhanced obfuscation, real-world benchmarking, and integration into penetration testing workflows.
+
+\vspace{1cm}
+
+\noindent\textbf{Keywords:} Cross-Site Scripting, XSS, Machine Learning, Transformer Models, Adversarial Payload Generation, Web Security, Automated Penetration Testing, Obfuscation, Context-Aware Attack Generation

@@ -1,0 +1,10 @@
+\chapter{Conclusion and Future Work}
+
+This mid-term report has detailed the design, development, and initial evaluation of Red Sentinel, a machine learning–driven system for generating context-aware XSS payloads. By leveraging transformer-based neural architectures, the project overcomes limitations of traditional signature-based scanners, enabling the creation of syntactically valid, context-adapted payloads capable of bypassing modern filtering mechanisms. The system is built on a modular microservice architecture consisting of a Context Extraction Module, a Payload Handler, and an Orchestration Core, ensuring scalability, maintainability, and flexibility in development. Experiments with GRU, LSTM, transformer, and T5-based models show that the byte-level transformer significantly outperforms recurrent models, producing structurally complex and execution-ready payloads tailored to HTML attributes, JavaScript contexts, event handlers, and URL parameters.
+
+Dataset preparation involved assembling diverse payload sources, applying byte-level tokenization to preserve special characters, and constructing context-labeled training pairs. The obfuscation module further enhances evasion capabilities through encoding-based, structural, and dynamic transformations aimed at bypassing web application firewalls and pattern-matching defenses. These combined innovations demonstrate the system’s technical feasibility and its potential impact on automated vulnerability discovery.
+
+
+Future development will focus on expanding system integration through plugins for tools such as Burp Suite, OWASP ZAP, and Metasploit, along with establishing a continuous learning pipeline and enabling distributed scanning via containerized microservices. Evaluation and validation efforts will include comprehensive benchmarking against open-source and commercial scanners using standardized test beds like WebGoat and DVWA, systematic WAF evasion testing against major platforms, and user studies with security professionals to measure usability, effectiveness, and workflow integration.
+
+
