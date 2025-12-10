@@ -2,30 +2,22 @@
 
 %---PREAMBLE BEGINS HERE---
 
+% Use custom report style package
+\usepackage{styles/report}
+
+% Page headers and footers
+\usepackage{fancyhdr}
+
+% Section formatting
+\usepackage{titlesec}
+
 % Graphics and figures
 \usepackage{graphicx}
 \usepackage{float}
 
-% Page geometry and layout
-\usepackage[a4paper]{geometry}
-\usepackage{fancyhdr}
-\usepackage{setspace}
-\usepackage[skip=18pt, indent=40pt]{parskip}
-
-% Typography and fonts
-\usepackage{mathptmx} % Times New Roman
-\usepackage{amsmath, amsthm, amsfonts}
-
-% Hyperlinks and references
-\usepackage[hidelinks]{hyperref}
-\usepackage[nottoc]{tocbibind}
-
 % Code formatting
 \usepackage{minted}
 \usepackage{listings}
-
-% Section formatting
-\usepackage{titlesec}
 
 % Lists and enumerations
 \usepackage{enumitem}
@@ -36,13 +28,7 @@
 
 % Table of contents customization
 \usepackage{tocloft}
-
-\setlength{\parindent}{0pt}
-
-\fancyhf{}
-\fancyfoot[C]{\thepage}
-\renewcommand{\headrulewidth}{0pt}
-\renewcommand{\footrulewidth}{0pt}
+\usepackage[nottoc]{tocbibind}
 
 \setlist[itemize]{noitemsep, topsep=0pt}
 \setlist[enumerate]{noitemsep, topsep=0pt}
@@ -78,22 +64,30 @@
 \newcommand{\institution}{Paschimanchal Campus}
 \newcommand{\university}{Tribhuvan University, Institute of Engineering}
 
+% Chapter formatting (override default)
 \titleformat{\chapter}
    {\fontsize{12pt}{12pt}\bfseries\uppercase}{\thechapter.}{1em}{}[\vspace{-\parskip}]
 \titlespacing*{\chapter}{0pt}{0pt}{12pt}
 
+% Chapter* formatting (for unnumbered chapters)
+\titleformat{name=\chapter,numberless}
+   {\fontsize{12pt}{12pt}\bfseries\uppercase}{}{0em}{}[\vspace{-\parskip}]
+\titlespacing*{name=\chapter,numberless}{0pt}{0pt}{12pt}
+
+% Section formatting
 \titleformat{\section}
    {\fontsize{12pt}{12pt}\bfseries}{\thesection}{1em}{}
-\titlespacing*{\section}{0pt}{18pt}{10pt}
+\titlespacing*{\section}{0pt}{12pt}{6pt}
 
+% Subsection formatting
 \titleformat{\subsection}
    {\fontsize{12pt}{12pt}\bfseries}{\thesubsection}{1em}{}
-\titlespacing*{\subsection}{0pt}{18pt}{8pt}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
 
+% Subsubsection formatting
 \titleformat{\subsubsection}
    {\fontsize{12pt}{12pt}\bfseries}{\thesubsubsection}{1em}{}
-\titlespacing*{\subsubsection}{0pt}{0pt}{6pt}
-\setcounter{secnumdepth}{3}
+\titlespacing*{\subsubsection}{0pt}{12pt}{6pt}
 
 \renewcommand{\cftfigpresnum}{Figure\ }
 \setlength{\cftfignumwidth}{5em}
@@ -158,9 +152,15 @@
 \listoffigures
 \newpage
 
-% List of Tables
-\listoftables
-\newpage
+% List of Tables (only if tables exist)
+\makeatletter
+\@ifundefined{c@table}{}{%
+  \ifnum\value{table}>0
+    \listoftables
+    \newpage
+  \fi
+}
+\makeatother
 
 % List of Abbreviations
 \include{includes/listofabbrevation}
@@ -168,7 +168,7 @@
 
 % Main content - Arabic numerals
 \pagenumbering{arabic}
-\pagestyle{fancy}
+\pagestyle{plain}
 
 % Chapters
 \include{chapters/introduction}

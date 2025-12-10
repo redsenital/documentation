@@ -15,21 +15,143 @@ To connect the ML-based payload generator with the rest of the system and other 
 
 \subsection{Core Module}
 
-The Core Module serves as the orchestration layer for Red Sentinel. It coordinates communication between different microservices, manages workflow execution, and maintains system state. Key responsibilities include:
+The Core Module serves as the orchestration layer and primary entry point for Red Sentinel. Implemented using NestJS, a progressive Node.js framework, it provides the foundational infrastructure for coordinating distributed microservices, managing workflow execution, and ensuring system reliability. The module operates as a RESTful API gateway that bridges external security researchers and internal ML-powered services.
+
+\subsubsection{Architectural Role and Responsibilities}
+
+The Core Module fulfills multiple critical roles within the Red Sentinel ecosystem:
 
 \begin{itemize}
-    \item \textbf{Workflow Orchestration:} Manages the end-to-end vulnerability testing workflow, from target URL submission to final report generation.
+    \item \textbf{API Gateway and Request Routing:} Exposes RESTful endpoints that accept target URLs and scanning parameters from clients. Routes requests to appropriate downstream services based on workflow stage and service availability.
     
-    \item \textbf{API Gateway:} Provides a unified RESTful API interface for external clients and internal service communication.
+    \item \textbf{Input Validation and Security Enforcement:} Implements comprehensive validation logic to ensure all user-provided inputs conform to security policies. This includes URL structure validation, protocol whitelisting (HTTP/HTTPS only), and Server-Side Request Forgery (SSRF) prevention through private IP address blocking.
     
-    \item \textbf{State Management:} Tracks scanning sessions, maintains payload generation history, and stores vulnerability findings.
+    \item \textbf{Workflow Orchestration:} Manages the multi-stage pipeline from initial target submission through context extraction, payload generation, obfuscation, and result aggregation. Coordinates asynchronous communication between services using message queues or direct HTTP invocation.
     
-    \item \textbf{Service Discovery:} Facilitates dynamic discovery and registration of microservices for scalable deployment.
+    \item \textbf{State Management:} Maintains scanning session state, tracks request progress, and persists intermediate results for fault tolerance and debugging. Implements distributed caching to reduce redundant operations.
     
-    \item \textbf{Error Handling and Recovery:} Implements retry mechanisms and fallback strategies for failed operations.
+    \item \textbf{Error Handling and Recovery:} Provides comprehensive error handling with typed exception filters, automatic retry mechanisms for transient failures, and graceful degradation when dependent services are unavailable.
+    
+    \item \textbf{Logging and Observability:} Generates structured logs with unique request identifiers for distributed tracing. Exposes metrics endpoints compatible with Prometheus for monitoring request rates, latency distributions, and error frequencies.
 \end{itemize}
 
-The Core Module is implemented using NestJS, a progressive Node.js framework that provides built-in support for microservices, dependency injection, and modular architecture patterns.
+\subsubsection{Step One: Target Input and Page Retrieval}
+
+The first operational step within the Core Module focuses on accepting target URLs, performing security validation, and retrieving raw HTML content. This foundational layer establishes the data pipeline upon which all subsequent analysis depends.
+
+\paragraph{Input Validation}
+
+When a client submits a target URL via the \texttt{POST /api/v1/gateway/fetch} endpoint, the system performs rigorous validation:
+
+\begin{enumerate}
+    \item \textbf{URL Structure Validation:} Parses the URL to ensure it contains all required components (protocol, hostname) and conforms to RFC 3986 standards. Rejects malformed URLs with descriptive error messages.
+    
+    \item \textbf{Protocol Enforcement:} Accepts only HTTP and HTTPS protocols. Rejects potentially dangerous schemes such as \texttt{file://}, \texttt{ftp://}, \texttt{javascript:}, and \texttt{data:} to prevent local file access and code injection attacks.
+    
+    \item \textbf{Length Constraints:} Enforces a maximum URL length of 2048 characters to prevent buffer overflow vulnerabilities and resource exhaustion.
+    
+    \item \textbf{DNS Resolution:} Resolves the target hostname to its IP address using standard DNS lookup mechanisms before initiating HTTP requests.
+\end{enumerate}
+
+\paragraph{SSRF Prevention}
+
+To prevent Server-Side Request Forgery attacks, the Core Module implements IP address filtering that blocks requests to private network ranges:
+
+\begin{itemize}
+    \item \textbf{IPv4 Private Ranges:} \texttt{10.0.0.0/8}, \texttt{172.16.0.0/12}, \texttt{192.168.0.0/16} (RFC 1918)
+    \item \textbf{Loopback Addresses:} \texttt{127.0.0.0/8} (IPv4), \texttt{::1/128} (IPv6)
+    \item \textbf{Link-Local Addresses:} \texttt{169.254.0.0/16} (IPv4), \texttt{fe80::/10} (IPv6)
+    \item \textbf{Reserved Ranges:} Multicast, broadcast, and experimental address spaces
+\end{itemize}
+
+Requests targeting these ranges are rejected with HTTP 403 Forbidden status, preventing attackers from scanning internal infrastructure or accessing cloud metadata endpoints.
+
+\paragraph{HTTP Request Execution}
+
+Upon successful validation, the Core Module configures an HTTP client with security-hardened settings:
+
+\begin{itemize}
+    \item \textbf{Timeout Configuration:} Enforces a default timeout of 30 seconds to prevent indefinite hanging. Configurable through request parameters within the range of 1-60 seconds.
+    
+    \item \textbf{Redirect Handling:} Follows HTTP redirects automatically up to a maximum of 5 redirects. Prevents redirect loops and excessive chain following that could indicate malicious targets.
+    
+    \item \textbf{TLS/SSL Validation:} Validates SSL certificates for HTTPS requests, rejecting self-signed certificates in production mode to ensure authenticity.
+    
+    \item \textbf{User-Agent Identification:} Sets a custom User-Agent header (\texttt{RedSentinel/1.0 (Security Scanner)}) for ethical disclosure, allowing site administrators to identify and control scanner access.
+    
+    \item \textbf{Content Size Limits:} Enforces a maximum response size of 10MB to prevent memory exhaustion attacks. Aborts downloads that exceed this threshold.
+\end{itemize}
+
+\paragraph{Response Processing}
+
+After successfully retrieving the target page, the Core Module processes the HTTP response:
+
+\begin{enumerate}
+    \item \textbf{Status Code Capture:} Records the final HTTP status code (e.g., 200, 301, 404) for diagnostic purposes.
+    
+    \item \textbf{Header Extraction:} Captures relevant response headers including \texttt{Content-Type}, \texttt{Content-Length}, \texttt{Server}, and security headers (\texttt{X-XSS-Protection}, \texttt{Content-Security-Policy}).
+    
+    \item \textbf{Content Validation:} Verifies the \texttt{Content-Type} header indicates HTML content (\texttt{text/html}). Non-HTML responses are logged but not rejected, as some applications serve HTML with incorrect MIME types.
+    
+    \item \textbf{HTML Body Extraction:} Reads the complete response body as text, preserving all whitespace, encoding, and formatting for accurate downstream analysis.
+\end{enumerate}
+
+\paragraph{Response Standardization}
+
+The Core Module returns a standardized JSON response structure for both successful and failed operations:
+
+\begin{verbatim}
+{
+  "success": true,
+  "data": {
+    "targetUrl": "https://example.com/search",
+    "finalUrl": "https://www.example.com/search",
+    "statusCode": 200,
+    "contentType": "text/html; charset=UTF-8",
+    "contentLength": 45678,
+    "html": "<!DOCTYPE html><html>...</html>",
+    "redirectCount": 1,
+    "fetchDuration": 1234
+  },
+  "metadata": {
+    "timestamp": "2025-12-10T14:32:15.789Z",
+    "requestId": "req_7f8a9b1c",
+    "version": "1.0.0"
+  }
+}
+\end{verbatim}
+
+This consistent response format simplifies integration with downstream services and enables automated result processing.
+
+\paragraph{Error Handling and Logging}
+
+The Core Module implements comprehensive error handling with specific error codes for common failure scenarios:
+
+\begin{itemize}
+    \item \texttt{INVALID\_URL\_FORMAT}: Malformed URL structure
+    \item \texttt{UNSUPPORTED\_PROTOCOL}: Non-HTTP/HTTPS protocol detected
+    \item \texttt{PRIVATE\_IP\_BLOCKED}: SSRF prevention triggered
+    \item \texttt{FETCH\_TIMEOUT}: Request exceeded timeout duration
+    \item \texttt{CONTENT\_TOO\_LARGE}: Response size exceeded 10MB limit
+    \item \texttt{TOO\_MANY\_REDIRECTS}: Redirect count exceeded maximum
+\end{itemize}
+
+All requests are logged with structured JSON formatting, including request IDs for distributed tracing, target URLs (sanitized to remove credentials), execution duration, and error details. Logs are categorized by severity (INFO, WARN, ERROR) and exported to centralized logging infrastructure for monitoring and auditing.
+
+\subsubsection{Technology Stack and Implementation}
+
+The Core Module leverages modern TypeScript-based technologies for reliability and maintainability:
+
+\begin{itemize}
+    \item \textbf{Framework:} NestJS 10.x with TypeScript 5.x for strong typing and compile-time safety
+    \item \textbf{HTTP Client:} Axios with configurable timeout, redirect, and proxy support
+    \item \textbf{Validation:} class-validator and class-transformer for declarative DTO validation
+    \item \textbf{Logging:} Winston with JSON formatting for structured logging
+    \item \textbf{Testing:} Jest for unit tests, Supertest for integration tests
+    \item \textbf{Documentation:} Swagger/OpenAPI for automated API documentation
+\end{itemize}
+
+The modular architecture enables independent testing, deployment, and scaling of the Core Module, supporting Red Sentinel's microservice design philosophy.
 
 \subsection{Context Module}
 

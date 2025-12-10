@@ -1,0 +1,45 @@
+\ProvidesPackage{report}
+
+% Geometry
+\usepackage{geometry}
+ \geometry{
+ a4paper,
+ total={170mm,257mm},
+ left=3.5cm,right=2cm,top=3.5cm,bottom=2cm
+ }
+ 
+% Break paragraphs
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1.1em}
+\setcounter{secnumdepth}{5}
+
+% Math tools
+\usepackage{mathtools}
+
+% Fonts
+\usepackage{mathptmx}
+
+% Line spacing
+% ------------
+% Options:
+%   singlespacing
+%   onehalfspacing
+\usepackage[onehalfspacing]{setspace}
+
+% PDF
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+
+% Spacing before/after equations
+\AtBeginDocument{
+  \setlength\abovedisplayskip{1em plus 2pt minus 2 pt}
+  \setlength\belowdisplayskip{1em plus 2pt minus 2 pt}
+  \setlength\abovedisplayshortskip{0.5em plus 2pt minus 2 pt}
+  \setlength\belowdisplayshortskip{0.5em plus 2pt minus 2 pt}
+}
+
+% Float numbering
+\usepackage{chngcntr}
+\counterwithin{figure}{section}
+\counterwithin{table}{section}
+\counterwithin{equation}{section}
